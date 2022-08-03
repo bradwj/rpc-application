@@ -1,7 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
 )
 
 type Item struct {
@@ -9,9 +12,11 @@ type Item struct {
 	body	string
 }
 
+type API int
+
 var database []Item
 
-func GetByName(title string) Item {
+func (a *API) GetByName(title string, reply *Item) error {
 	var getItem Item
 
 	for _, val := range database {
@@ -20,28 +25,30 @@ func GetByName(title string) Item {
 		}
 	}
 
-	return getItem
+	*reply = getItem
+	return nil
 }
 
-func AddItem(item Item) Item {
+func (a *API) AddItem(item Item, reply *Item) error {
 	database = append(database, item)
-	return item
+	*reply = item
+	return nil
 }
 
-func EditItem(title string, edit Item) Item {
+func (a *API) EditItem(edit Item, reply *Item) error {
 	var changed Item
 
 	for idx, val := range database {
-		if val.title == title {
-			database[idx] = edit
-			changed = edit
+		if val.title == edit.title {
+			database[idx] = Item{edit.title, edit.body}
+			changed = database[idx]
 		}
 	}
-
-	return changed
+	*reply = changed
+	return nil
 }
 
-func DeleteItem(item Item) Item {
+func (a *API) DeleteItem(item Item, reply *Item) error {
 	var deleted Item
 
 	for idx, val := range database {
@@ -51,28 +58,47 @@ func DeleteItem(item Item) Item {
 			break
 		}
 	}
-
-	return deleted
+	*reply = deleted
+	return nil
 }
 
 func main() {
-	fmt.Println("initial database: ", database)
-	a := Item{"first", "the first item"}
-	b := Item{"second", "the second item"}
-	c := Item{"third", "the third item"}
+	var api = new(API)
+	err := rpc.Register(api)
+	if err != nil {
+		log.Fatal("error registering API", err)
+	}
 
-	AddItem(a)
-	AddItem(b)
-	AddItem(c)
-	fmt.Println("database after adding items: ", database)
+	rpc.HandleHTTP()
 
-	DeleteItem(b)
-	fmt.Println("database after deleting second item: ", database)
+	listener, err := net.Listen("tcp", ":4040")
+	if err != nil {
+		log.Fatal("Listener error", err)
+	}
+	
+	log.Printf("serving rpc on port %d", 4040)
+	err = http.Serve(listener, nil)
+	if err != nil {
+		log.Fatal("error serving: ", err)
+	}
 
-	EditItem("third", Item{"fourth", "a new item"})
-	fmt.Println("database after editing third item: ", database)
+	// fmt.Println("initial database: ", database)
+	// a := Item{"first", "the first item"}
+	// b := Item{"second", "the second item"}
+	// c := Item{"third", "the third item"}
 
-	x := GetByName("fourth")
-	y := GetByName("first")
-	fmt.Println(x, y)
+	// AddItem(a)
+	// AddItem(b)
+	// AddItem(c)
+	// fmt.Println("database after adding items: ", database)
+
+	// DeleteItem(b)
+	// fmt.Println("database after deleting second item: ", database)
+
+	// EditItem("third", Item{"fourth", "a new item"})
+	// fmt.Println("database after editing third item: ", database)
+
+	// x := GetByName("fourth")
+	// y := GetByName("first")
+	// fmt.Println(x, y)
 }
